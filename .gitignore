@@ -2,3 +2,5 @@
 .gdbinit
 .idea/
 .vs/
+.vscode/
+.direnv/
