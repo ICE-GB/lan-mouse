@@ -31,16 +31,16 @@ use crate::{
 pub mod cli;
 
 /// gtk frontend
-#[cfg(all(unix, feature = "gtk"))]
+#[cfg(feature = "gtk")]
 pub mod gtk;
 
 pub fn run_frontend(config: &Config) -> Result<()> {
     match config.frontend {
-        #[cfg(all(unix, feature = "gtk"))]
+        #[cfg(feature = "gtk")]
         Frontend::Gtk => {
             gtk::run();
         }
-        #[cfg(any(not(feature = "gtk"), not(unix)))]
+        #[cfg(not(feature = "gtk"))]
         Frontend::Gtk => panic!("gtk frontend requested but feature not enabled!"),
         Frontend::Cli => {
             cli::run()?;
@@ -108,6 +108,7 @@ pub enum FrontendNotify {
     NotifyClientDelete(ClientHandle),
     /// new port, reason of failure (if failed)
     NotifyPortChange(u16, Option<String>),
+    /// Client State, active
     Enumerate(Vec<(Client, bool)>),
     NotifyError(String),
 }

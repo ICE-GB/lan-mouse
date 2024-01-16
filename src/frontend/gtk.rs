@@ -14,7 +14,7 @@ use adw::Application;
 use gtk::{
     gdk::Display,
     gio::{SimpleAction, SimpleActionGroup},
-    glib::{clone, MainContext, Priority},
+    glib::clone,
     prelude::*,
     subclass::prelude::ObjectSubclassIsExt,
     CssProvider, IconTheme,
@@ -27,7 +27,17 @@ use super::FrontendNotify;
 
 pub fn run() -> glib::ExitCode {
     log::debug!("running gtk frontend");
+    #[cfg(windows)]
+    let ret = std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024) // https://gitlab.gnome.org/GNOME/gtk/-/commit/52dbb3f372b2c3ea339e879689c1de535ba2c2c3 -> caused crash on windows
+        .name("gtk".into())
+        .spawn(gtk_main)
+        .unwrap()
+        .join()
+        .unwrap();
+    #[cfg(not(windows))]
     let ret = gtk_main();
+
     log::debug!("frontend exited");
     ret
 }
@@ -36,7 +46,7 @@ fn gtk_main() -> glib::ExitCode {
     gio::resources_register_include!("lan-mouse.gresource").expect("Failed to register resources.");
 
     let app = Application::builder()
-        .application_id("de.feschber.lan-mouse")
+        .application_id("de.feschber.LanMouse")
         .build();
 
     app.connect_startup(|_| load_icons());
@@ -81,7 +91,7 @@ fn build_ui(app: &Application) {
     };
     log::debug!("connected to lan-mouse-socket");
 
-    let (sender, receiver) = MainContext::channel::<FrontendNotify>(Priority::default());
+    let (sender, receiver) = async_channel::bounded(10);
 
     gio::spawn_blocking(move || {
         match loop {
@@ -105,7 +115,7 @@ fn build_ui(app: &Application) {
             // parse json
             let json = str::from_utf8(&buf).unwrap();
             match serde_json::from_str(json) {
-                Ok(notify) => sender.send(notify).unwrap(),
+                Ok(notify) => sender.send_blocking(notify).unwrap(),
                 Err(e) => log::error!("{e}"),
             }
         } {
@@ -116,8 +126,9 @@ fn build_ui(app: &Application) {
 
     let window = Window::new(app);
     window.imp().stream.borrow_mut().replace(tx);
-    receiver.attach(None, clone!(@weak window => @default-return glib::ControlFlow::Break,
-        move |notify| {
+    glib::spawn_future_local(clone!(@weak window => async move {
+        loop {
+            let notify = receiver.recv().await.unwrap();
             match notify {
                 FrontendNotify::NotifyClientCreate(client, hostname, port, position) => {
                     window.new_client(client, hostname, port, position, false);
@@ -158,9 +169,8 @@ fn build_ui(app: &Application) {
                     window.imp().set_port(port);
                 }
             }
-            glib::ControlFlow::Continue
         }
-    ));
+    }));
 
     let action_request_client_update =
         SimpleAction::new("request-client-update", Some(&u32::static_variant_type()));

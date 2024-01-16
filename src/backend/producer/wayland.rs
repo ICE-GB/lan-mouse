@@ -10,7 +10,7 @@ use std::{
     collections::VecDeque,
     env,
     io::{self, ErrorKind},
-    os::fd::{OwnedFd, RawFd},
+    os::fd::{AsFd, OwnedFd, RawFd},
     pin::Pin,
     task::{ready, Context, Poll},
 };
@@ -125,6 +125,7 @@ struct Window {
     buffer: wl_buffer::WlBuffer,
     surface: wl_surface::WlSurface,
     layer_surface: ZwlrLayerSurfaceV1,
+    pos: Position,
 }
 
 impl Window {
@@ -145,7 +146,7 @@ impl Window {
         draw(&mut file, (width, height));
         let pool = g
             .shm
-            .create_pool(file.as_raw_fd(), (width * height * 4) as i32, qh, ());
+            .create_pool(file.as_fd(), (width * height * 4) as i32, qh, ());
         let buffer = pool.create_buffer(
             0,
             width as i32,
@@ -179,6 +180,7 @@ impl Window {
         surface.set_input_region(None);
         surface.commit();
         Window {
+            pos,
             buffer,
             surface,
             layer_surface,
@@ -324,7 +326,7 @@ impl WaylandEventProducer {
         queue.flush()?;
 
         // prepare reading wayland events
-        let read_guard = queue.prepare_read()?;
+        let read_guard = queue.prepare_read().unwrap(); // there can not yet be events to dispatch
         let wayland_fd = read_guard.connection_fd().try_clone_to_owned().unwrap();
         std::mem::drop(read_guard);
 
@@ -366,12 +368,38 @@ impl WaylandEventProducer {
             log::debug!("{:#?}", i.1);
         }
 
-        let read_guard = queue.prepare_read()?;
+        let read_guard = loop {
+            match queue.prepare_read() {
+                Some(r) => break r,
+                None => {
+                    queue.dispatch_pending(&mut state)?;
+                    continue;
+                }
+            }
+        };
         state.read_guard = Some(read_guard);
 
         let inner = AsyncFd::new(Inner { queue, state })?;
 
         Ok(WaylandEventProducer(inner))
+    }
+
+    fn add_client(&mut self, handle: ClientHandle, pos: Position) {
+        self.0.get_mut().state.add_client(handle, pos);
+    }
+
+    fn delete_client(&mut self, handle: ClientHandle) {
+        let inner = self.0.get_mut();
+        // remove all windows corresponding to this client
+        while let Some(i) = inner
+            .state
+            .client_for_window
+            .iter()
+            .position(|(_, c)| *c == handle)
+        {
+            inner.state.client_for_window.remove(i);
+            inner.state.focused = None;
+        }
     }
 }
 
@@ -467,6 +495,19 @@ impl State {
             self.client_for_window.push((window, client));
         });
     }
+
+    fn update_windows(&mut self) {
+        log::debug!("updating windows");
+        log::debug!("output info: {:?}", self.output_info);
+        let clients: Vec<_> = self
+            .client_for_window
+            .drain(..)
+            .map(|(w, c)| (c, w.pos))
+            .collect();
+        for (client, pos) in clients {
+            self.add_client(client, pos);
+        }
+    }
 }
 
 impl Inner {
@@ -484,16 +525,20 @@ impl Inner {
         }
     }
 
-    fn prepare_read(&mut self) {
-        match self.queue.prepare_read() {
-            Ok(r) => self.state.read_guard = Some(r),
-            Err(WaylandError::Io(e)) => {
-                log::error!("error preparing read from wayland socket: {e}")
+    fn prepare_read(&mut self) -> io::Result<()> {
+        loop {
+            match self.queue.prepare_read() {
+                None => match self.queue.dispatch_pending(&mut self.state) {
+                    Ok(_) => continue,
+                    Err(DispatchError::Backend(WaylandError::Io(e))) => return Err(e),
+                    Err(e) => panic!("failed to dispatch wayland events: {e}"),
+                },
+                Some(r) => {
+                    self.state.read_guard = Some(r);
+                    break Ok(());
+                }
             }
-            Err(WaylandError::Protocol(e)) => {
-                panic!("wayland Protocol violation: {e}")
-            }
-        };
+        }
     }
 
     fn dispatch_events(&mut self) {
@@ -515,50 +560,42 @@ impl Inner {
         }
     }
 
-    fn flush_events(&mut self) {
+    fn flush_events(&mut self) -> io::Result<()> {
         // flush outgoing events
         match self.queue.flush() {
             Ok(_) => (),
             Err(e) => match e {
                 WaylandError::Io(e) => {
-                    log::error!("error writing to wayland socket: {e}")
+                    return Err(e);
                 }
                 WaylandError::Protocol(e) => {
                     panic!("wayland protocol violation: {e}")
                 }
             },
         }
+        Ok(())
     }
 }
 
 impl EventProducer for WaylandEventProducer {
-    fn notify(&mut self, client_event: ClientEvent) {
+    fn notify(&mut self, client_event: ClientEvent) -> io::Result<()> {
         match client_event {
             ClientEvent::Create(handle, pos) => {
-                self.0.get_mut().state.add_client(handle, pos);
+                self.add_client(handle, pos);
             }
             ClientEvent::Destroy(handle) => {
-                let inner = self.0.get_mut();
-                // remove all windows corresponding to this client
-                while let Some(i) = inner
-                    .state
-                    .client_for_window
-                    .iter()
-                    .position(|(_, c)| *c == handle)
-                {
-                    inner.state.client_for_window.remove(i);
-                    inner.state.focused = None;
-                }
+                self.delete_client(handle);
             }
         }
         let inner = self.0.get_mut();
-        inner.flush_events();
+        inner.flush_events()
     }
 
-    fn release(&mut self) {
+    fn release(&mut self) -> io::Result<()> {
+        log::debug!("releasing pointer");
         let inner = self.0.get_mut();
         inner.state.ungrab();
-        inner.flush_events();
+        inner.flush_events()
     }
 }
 
@@ -579,17 +616,27 @@ impl Stream for WaylandEventProducer {
                 // read events
                 while inner.read() {
                     // prepare next read
-                    inner.prepare_read();
+                    match inner.prepare_read() {
+                        Ok(_) => {}
+                        Err(e) => return Poll::Ready(Some(Err(e))),
+                    }
                 }
 
                 // dispatch the events
                 inner.dispatch_events();
 
                 // flush outgoing events
-                inner.flush_events();
+                if let Err(e) = inner.flush_events() {
+                    if e.kind() != ErrorKind::WouldBlock {
+                        return Poll::Ready(Some(Err(e)));
+                    }
+                }
 
                 // prepare for the next read
-                inner.prepare_read();
+                match inner.prepare_read() {
+                    Ok(_) => {}
+                    Err(e) => return Poll::Ready(Some(Err(e))),
+                }
             }
 
             // clear read readiness for tokio read guard
@@ -665,6 +712,13 @@ impl Dispatch<wl_pointer::WlPointer, ()> for State {
                 app.pending_events.push_back((*client, Event::Enter()));
             }
             wl_pointer::Event::Leave { .. } => {
+                /* There are rare cases, where when a window is opened in
+                 * just the wrong moment, the pointer is released, while
+                 * still grabbed.
+                 * In that case, the pointer must be ungrabbed, otherwise
+                 * it is impossible to grab it again (since the pointer
+                 * lock, relative pointer,... objects are still in place)
+                 */
                 app.ungrab();
             }
             wl_pointer::Event::Button {
@@ -905,6 +959,21 @@ impl Dispatch<ZxdgOutputV1, WlOutput> for State {
     }
 }
 
+impl Dispatch<wl_output::WlOutput, ()> for State {
+    fn event(
+        state: &mut Self,
+        _proxy: &wl_output::WlOutput,
+        event: <wl_output::WlOutput as wayland_client::Proxy>::Event,
+        _data: &(),
+        _conn: &Connection,
+        _qhandle: &QueueHandle<Self>,
+    ) {
+        if let wl_output::Event::Done = event {
+            state.update_windows();
+        }
+    }
+}
+
 // don't emit any events
 delegate_noop!(State: wl_region::WlRegion);
 delegate_noop!(State: wl_shm_pool::WlShmPool);
@@ -915,7 +984,6 @@ delegate_noop!(State: ZwpKeyboardShortcutsInhibitManagerV1);
 delegate_noop!(State: ZwpPointerConstraintsV1);
 
 // ignore events
-delegate_noop!(State: ignore wl_output::WlOutput);
 delegate_noop!(State: ignore ZxdgOutputManagerV1);
 delegate_noop!(State: ignore wl_shm::WlShm);
 delegate_noop!(State: ignore wl_buffer::WlBuffer);

@@ -14,13 +14,25 @@ The primary target is Wayland on Linux but Windows and MacOS and Linux on Xorg h
 </picture>
 
 
-Goal of this project is to be an open-source replacement for proprietary tools like [Synergy](https://symless.com/synergy), [Share Mouse](https://www.sharemouse.com/de/).
+Goal of this project is to be an open-source replacement for proprietary tools like [Synergy 2/3](https://symless.com/synergy), [Share Mouse](https://www.sharemouse.com/de/).
 
 Focus lies on performance and a clean, manageable implementation that can easily be expanded to support additional backends like e.g. Android, iOS, ... .
 
 ***blazingly fast™*** because it's written in rust.
 
 For an alternative (with slightly different goals) you may check out [Input Leap](https://github.com/input-leap).
+
+
+> [!WARNING]
+> Since this tool has gained a bit of popularity over the past couple of days:
+>
+> All network traffic is currently **unencrypted** and sent in **plaintext**.
+>
+> A malicious actor with access to the network could read input data or send input events with spoofed IPs to take control over a device.
+>
+> Therefore you should only use this tool in your local network with trusted devices for now
+> and I take no responsibility for any leakage of data!
+
 
 ## OS Support
 
@@ -38,7 +50,77 @@ input capture (to send events *to* other clients) on different operating systems
 
 Keycode translation is not yet implemented so on MacOS only mouse emulation works as of right now.
 
+> [!Important]
+> If you are using [Wayfire](https://github.com/WayfireWM/wayfire), make sure to use a recent version (must be newer than October 23rd) and **add `shortcuts-inhibit` to the list of plugins in your wayfire config!**
+> Otherwise input capture will not work.
+
 ## Build and Run
+
+### Install Dependencies
+#### Macos
+```sh
+brew install libadwaita
+```
+
+#### Ubuntu and derivatives
+```sh
+sudo apt install libadwaita-1-dev libgtk-4-dev libx11-dev libxtst-dev
+```
+
+#### Arch and derivatives
+```sh
+sudo pacman -S libadwaita gtk libx11 libxtst
+```
+
+#### Fedora and derivatives
+```sh
+sudo dnf install libadwaita-devel libXtst-devel libX11-devel
+```
+
+#### Windows
+Follow the instructions at [gtk-rs.org](https://gtk-rs.org/gtk4-rs/stable/latest/book/installation_windows.html)
+
+*TLDR:*
+
+Build gtk from source
+
+- The following commands should be run in an admin power shell instance:
+```sh
+# install chocolatey
+Set-ExecutionPolicy Bypass -Scope Process -Force; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# install python 3.11 (Version is important, as 3.12 does not work currently)
+choco install python --version=3.11.0
+
+# install git
+choco install git
+
+# install msys2
+choco install msys2
+
+# install Visual Studio 2022
+choco install visualstudio2022-workload-vctools
+```
+
+- The following commands should be run in a regular power shell instance:
+
+```sh
+# install gvsbuild with python
+python -m pip install --user pipx
+python -m pipx ensurepath
+pipx install gvsbuild
+
+# build gtk + libadwaita
+gvsbuild build gtk4 libadwaita librsvg
+```
+
+Make sure to add the directory `C:\gtk-build\gtk\x64\release\bin`
+[to the `PATH` environment variable]((https://learn.microsoft.com/en-us/previous-versions/office/developer/sharepoint-2010/ee537574(v=office.14))). Otherwise the project will fail to build.
+
+To avoid building GTK from source, it is possible to disable
+the gtk frontend (see conditional compilation below).
+
+### Build and run
 Build in release mode:
 ```sh
 cargo build --release
@@ -144,11 +226,12 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] respect xdg-config-home for config file location.
 - [x] IP Address switching
 - [x] Liveness tracking Automatically ungrab mouse when client unreachable
-- [ ] Liveness tracking: Automatically release keys, when server offline
+- [x] Liveness tracking: Automatically release keys, when server offline
+- [ ] Libei Input Capture
 - [ ] X11 Input Capture
 - [ ] Windows Input Capture
 - [ ] MacOS Input Capture
-- [ ] MaxOS KeyCode Translation
+- [ ] MacOS KeyCode Translation
 - [ ] Latency measurement and visualization
 - [ ] Bandwidth usage measurement and visualization
 - [ ] Clipboard support

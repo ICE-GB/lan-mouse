@@ -2,7 +2,6 @@ use std::{
     collections::HashSet,
     fmt::Display,
     net::{IpAddr, SocketAddr},
-    time::Instant,
 };
 
 use serde::{Deserialize, Serialize};
@@ -51,14 +50,12 @@ impl Display for Position {
 pub struct Client {
     /// hostname of this client
     pub hostname: Option<String>,
+    /// fix ips, determined by the user
+    pub fix_ips: Vec<IpAddr>,
     /// unique handle to refer to the client.
     /// This way any event consumer / producer backend does not
     /// need to know anything about a client other than its handle.
     pub handle: ClientHandle,
-    /// `active` address of the client, used to send data to.
-    /// This should generally be the socket address where data
-    /// was last received from.
-    pub active_addr: Option<SocketAddr>,
     /// all socket addresses associated with a particular client
     /// e.g. Laptops usually have at least an ethernet and a wifi port
     /// which have different ip addresses
@@ -69,7 +66,7 @@ pub struct Client {
     pub pos: Position,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum ClientEvent {
     Create(ClientHandle, Position),
     Destroy(ClientHandle),
@@ -79,11 +76,18 @@ pub type ClientHandle = u32;
 
 #[derive(Debug, Clone)]
 pub struct ClientState {
+    /// information about the client
     pub client: Client,
+    /// events should be sent to and received from the client
     pub active: bool,
-    pub last_ping: Option<Instant>,
-    pub last_seen: Option<Instant>,
-    pub last_replied: Option<Instant>,
+    /// `active` address of the client, used to send data to.
+    /// This should generally be the socket address where data
+    /// was last received from.
+    pub active_addr: Option<SocketAddr>,
+    /// tracks whether or not the client is responding to pings
+    pub alive: bool,
+    /// keys currently pressed by this client
+    pub pressed_keys: HashSet<u32>,
 }
 
 pub struct ClientManager {
@@ -105,24 +109,24 @@ impl ClientManager {
     pub fn add_client(
         &mut self,
         hostname: Option<String>,
-        addrs: HashSet<IpAddr>,
+        ips: HashSet<IpAddr>,
         port: u16,
         pos: Position,
     ) -> ClientHandle {
         // get a new client_handle
         let handle = self.free_id();
 
-        // we dont know, which IP is initially active
-        let active_addr = None;
+        // store fix ip addresses
+        let fix_ips = ips.iter().cloned().collect();
 
         // map ip addresses to socket addresses
-        let addrs = HashSet::from_iter(addrs.into_iter().map(|ip| SocketAddr::new(ip, port)));
+        let addrs = HashSet::from_iter(ips.into_iter().map(|ip| SocketAddr::new(ip, port)));
 
         // store the client
         let client = Client {
             hostname,
+            fix_ips,
             handle,
-            active_addr,
             addrs,
             port,
             pos,
@@ -131,10 +135,10 @@ impl ClientManager {
         // client was never seen, nor pinged
         let client_state = ClientState {
             client,
-            last_ping: None,
-            last_seen: None,
-            last_replied: None,
             active: false,
+            active_addr: None,
+            alive: false,
+            pressed_keys: HashSet::new(),
         };
 
         if handle as usize >= self.clients.len() {
