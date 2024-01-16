@@ -158,7 +158,7 @@ impl ClientManager {
             .iter()
             .position(|c| {
                 if let Some(c) = c {
-                    c.active && c.client.addrs.contains(&addr)
+                    c.active && c.client.addrs.iter().any(|&item| match_socket_addr(&item, &addr))
                 } else {
                     false
                 }
@@ -201,4 +201,9 @@ impl ClientManager {
     pub fn get_client_states_mut(&mut self) -> impl Iterator<Item = &mut ClientState> {
         self.clients.iter_mut().filter_map(|x| x.as_mut())
     }
+}
+
+
+fn match_socket_addr(addr1: &SocketAddr, addr2: &SocketAddr) -> bool {
+    addr1.ip() == addr2.ip() // 检查 IP 地址是否相同
 }
