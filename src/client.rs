@@ -70,10 +70,10 @@ pub struct Client {
     /// This way any event consumer / producer backend does not
     /// need to know anything about a client other than its handle.
     pub handle: ClientHandle,
-    /// all socket addresses associated with a particular client
+    /// all ip addresses associated with a particular client
     /// e.g. Laptops usually have at least an ethernet and a wifi port
     /// which have different ip addresses
-    pub addrs: HashSet<SocketAddr>,
+    pub ips: HashSet<IpAddr>,
     /// both active_addr and addrs can be None / empty so port needs to be stored seperately
     pub port: u16,
     /// position of a client on screen
@@ -134,15 +134,12 @@ impl ClientManager {
         // store fix ip addresses
         let fix_ips = ips.iter().cloned().collect();
 
-        // map ip addresses to socket addresses
-        let addrs = HashSet::from_iter(ips.into_iter().map(|ip| SocketAddr::new(ip, port)));
-
         // store the client
         let client = Client {
             hostname,
             fix_ips,
             handle,
-            addrs,
+            ips,
             port,
             pos,
         };
@@ -173,7 +170,7 @@ impl ClientManager {
             .iter()
             .position(|c| {
                 if let Some(c) = c {
-                    c.active && c.client.addrs.iter().any(|&item| match_socket_addr(&item, &addr))
+                    c.active && c.client.ips.contains(&addr.ip())
                 } else {
                     false
                 }
@@ -216,9 +213,4 @@ impl ClientManager {
     pub fn get_client_states_mut(&mut self) -> impl Iterator<Item = &mut ClientState> {
         self.clients.iter_mut().filter_map(|x| x.as_mut())
     }
-}
-
-
-fn match_socket_addr(addr1: &SocketAddr, addr2: &SocketAddr) -> bool {
-    addr1.ip() == addr2.ip() // 检查 IP 地址是否相同
 }
