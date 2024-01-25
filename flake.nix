@@ -29,7 +29,13 @@
       pkgs.rust-bin.stable.latest.default.override {
         extensions = ["rust-src"];
       };
+    pkgs = genSystems (system: import nixpkgs {inherit system;});
   in {
+    packages = genSystems (system: rec {
+      default = pkgs.${system}.callPackage ./nix {};
+      lan-mouse = default;
+    });
+    homeManagerModules.default = import ./nix/hm-module.nix self;
     devShells = genSystems (system: let
       pkgs = pkgsFor system;
       rust = mkRustToolchain pkgs;
