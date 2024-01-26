@@ -44,22 +44,11 @@
         packages = with pkgs; [
           rust
           rust-analyzer-unwrapped
-          gcc
-          gtk3
+          pkg-config
+          xorg.libX11
           gtk4
           libadwaita
           xorg.libXtst
-          gtk-layer-shell
-          pkg-config
-          openssl
-          gdk-pixbuf
-          glib
-          glib-networking
-          shared-mime-info
-          gnome.adwaita-icon-theme
-          hicolor-icon-theme
-          gsettings-desktop-schemas
-          libxkbcommon
         ];
 
         RUST_SRC_PATH = "${rust}/lib/rustlib/src/rust/library";
