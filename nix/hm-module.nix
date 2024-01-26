@@ -20,10 +20,15 @@ in {
         By default, this option will use the `packages.default` as exposed by this flake.
       '';
     };
+    systemd = lib.mkOption {
+      type = lib.types.bool;
+      default = pkgs.stdenv.isLinux;
+      description = "Whether to enable to systemd service for lan-mouse.";
+    };
   };
 
   config = mkIf cfg.enable {
-    systemd.user.services.lan-mouse = {
+    systemd.user.services.lan-mouse = lib.mkIf cfg.systemd {
       Unit = {
         Description = "Systemd service for Lan Mouse";
         Requires = ["graphical-session.target"];
