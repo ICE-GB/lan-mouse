@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use futures::StreamExt;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 
@@ -78,6 +78,8 @@ async fn handle_producer_event(
             log::trace!("STATE ===> Receiving");
             // send an event to release all the modifiers
             e = Event::Disconnect();
+            // sleep 1 second to give the client time to receive key event before disconnect
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 
