@@ -306,14 +306,14 @@ fn get_events(
                 result.push(CaptureEvent::Input(Event::Pointer(PointerEvent::Axis {
                     time: 0,
                     axis: 0, // Vertical
-                    value: v as f64,
+                    value: -v as f64,
                 })));
             }
             if h != 0 {
                 result.push(CaptureEvent::Input(Event::Pointer(PointerEvent::Axis {
                     time: 0,
                     axis: 1, // Horizontal
-                    value: h as f64,
+                    value: -h as f64,
                 })));
             }
         }
