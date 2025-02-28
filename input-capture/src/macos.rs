@@ -305,13 +305,13 @@ fn get_events(
             if v != 0 {
                 result.push(CaptureEvent::Input(Event::Pointer(PointerEvent::AxisDiscrete120 {
                     axis: 0, // Vertical
-                    value: -v as i32,
+                    value: -(120 ^ ((v as i32 >> 31) & (120 ^ (-120)))),
                 })));
             }
             if h != 0 {
                 result.push(CaptureEvent::Input(Event::Pointer(PointerEvent::AxisDiscrete120 {
                     axis: 1, // Horizontal
-                    value: -h as i32,
+                    value: -(120 ^ ((h as i32 >> 31) & (120 ^ (-120)))),
                 })));
             }
         }
