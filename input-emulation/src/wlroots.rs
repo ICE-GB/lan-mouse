@@ -209,8 +209,20 @@ impl VirtualInput {
                     }
                     PointerEvent::AxisDiscrete120 { axis, value } => {
                         let axis: Axis = (axis as u32).try_into()?;
+                        let (scaled_value, scaled_discrete) = if std::env::var(
+                            "XDG_CURRENT_DESKTOP",
+                        )
+                        .map_or(false, |v| v == "niri")
+                        {
+                            (value as f64, value / 2)
+                        } else {
+                            (value as f64 / 6., value / 120)
+                        };
+                        log::trace!("value: {} discrete: {}", scaled_value, scaled_discrete);
                         self.pointer
-                            .axis_discrete(now, axis, value as f64 / 6., value / 120);
+                            .axis_discrete(now, axis, scaled_value, scaled_discrete);
+                        self.pointer
+                            .axis_source(wayland_client::protocol::wl_pointer::AxisSource::Wheel);
                         self.pointer.frame();
                     }
                 }
