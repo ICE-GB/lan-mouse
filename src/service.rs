@@ -295,6 +295,8 @@ impl Service {
                     log::warn!("could not resolve {hostname}: {e}");
                 }
                 let ips = ips.unwrap_or_default();
+                let ip_strings: Vec<String> = ips.iter().map(|ip| ip.to_string()).collect();
+                log::info!("resolve {hostname}: {}", ip_strings.join(", "));
                 self.client_manager.set_dns_ips(handle, ips);
                 handle
             }
@@ -304,6 +306,7 @@ impl Service {
 
     fn resolve(&self, handle: ClientHandle) {
         if let Some(hostname) = self.client_manager.get_hostname(handle) {
+            log::info!("resolveing {hostname} ...");
             self.resolver.resolve(handle, hostname);
         }
     }
