@@ -303,16 +303,20 @@ fn get_events(
             let v = ev.get_integer_value_field(EventField::SCROLL_WHEEL_EVENT_POINT_DELTA_AXIS_1);
             let h = ev.get_integer_value_field(EventField::SCROLL_WHEEL_EVENT_POINT_DELTA_AXIS_2);
             if v != 0 {
-                result.push(CaptureEvent::Input(Event::Pointer(PointerEvent::AxisDiscrete120 {
-                    axis: 0, // Vertical
-                    value: -(120 ^ ((v as i32 >> 31) & (120 ^ (-120)))),
-                })));
+                result.push(CaptureEvent::Input(Event::Pointer(
+                    PointerEvent::AxisDiscrete120 {
+                        axis: 0, // Vertical
+                        value: -(120 ^ ((v as i32 >> 31) & (120 ^ (-120)))),
+                    },
+                )));
             }
             if h != 0 {
-                result.push(CaptureEvent::Input(Event::Pointer(PointerEvent::AxisDiscrete120 {
-                    axis: 1, // Horizontal
-                    value: -(120 ^ ((h as i32 >> 31) & (120 ^ (-120)))),
-                })));
+                result.push(CaptureEvent::Input(Event::Pointer(
+                    PointerEvent::AxisDiscrete120 {
+                        axis: 1, // Horizontal
+                        value: -(120 ^ ((h as i32 >> 31) & (120 ^ (-120)))),
+                    },
+                )));
             }
         }
         _ => (),
