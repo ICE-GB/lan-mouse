@@ -54,7 +54,7 @@
           librsvg
           xorg.libXtst
         ] ++ lib.optionals stdenv.isDarwin
-        (with darwin.apple_sdk_11_0.frameworks; [
+        (with apple-sdk_11.frameworks; [
           CoreGraphics
           ApplicationServices
         ]);
