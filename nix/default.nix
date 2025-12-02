@@ -25,10 +25,9 @@ rustPlatform.buildRustPackage {
     libadwaita
     xorg.libXtst
   ] ++ lib.optionals stdenv.isDarwin
-  (with darwin.apple_sdk_11_0.frameworks; [
-    CoreGraphics
-    ApplicationServices
-  ]);
+  [
+    apple-sdk_26
+  ];
 
   src = builtins.path {
     name = pname;
