@@ -4,7 +4,6 @@
   lib,
   pkg-config,
   libX11,
-  gtk4,
   libadwaita,
   libXtst,
   wrapGAppsHook4,
@@ -25,13 +24,11 @@ rustPlatform.buildRustPackage {
   nativeBuildInputs = [
     cmake
     pkg-config
-    buildPackages.gtk4
     wrapGAppsHook4
     git
   ];
 
   buildInputs = [
-    gtk4
     libadwaita
     librsvg
   ]
