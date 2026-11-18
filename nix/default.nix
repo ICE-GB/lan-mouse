@@ -5,6 +5,7 @@
   pkg-config,
   libX11,
   gtk4,
+  libgit2,
   libadwaita,
   libXtst,
   wrapGAppsHook4,
@@ -28,6 +29,11 @@ rustPlatform.buildRustPackage {
 
   buildInputs = [
     gtk4
+    # shadow-rs -> git2 -> libgit2-sys. nixpkgs' cargoSetupHook has exported
+    # LIBGIT2_NO_VENDOR=1 since 2026-10 (nixos/nixpkgs@44cddf92c4,
+    # "cargoSetupHook: Force system libs"), so libgit2-sys refuses to vendor
+    # libgit2 and needs the system one via pkg-config.
+    libgit2
     libadwaita
     librsvg
   ]
